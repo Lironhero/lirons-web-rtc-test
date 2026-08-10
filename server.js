@@ -168,7 +168,6 @@ function handleMessage(ws, raw, wss) {
       const code = String(msg.code || "").trim().toUpperCase();
       const lobby = lobbies.get(code);
       if (!lobby) return send(ws, { type: "error", message: "lobby_not_found" });
-      if (lobby.inGame) return send(ws, { type: "error", message: "game_in_progress" });
       if (lobby.members.size >= lobby.maxPlayers)
         return send(ws, { type: "error", message: "lobby_full" });
 
@@ -188,6 +187,8 @@ function handleMessage(ws, raw, wss) {
         name,
         players: [...lobby.members.entries()].map(([pid, m]) => ({ id: pid, name: m.name })),
       });
+      // Late join into an already-running game: tell the new player to enter it.
+      if (lobby.inGame) send(ws, { type: "start" });
       sendToLobby(lobby, { type: "peer_joined", id, name }, id);
       broadcastLobbyList(wss);
       break;
