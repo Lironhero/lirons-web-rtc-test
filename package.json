@@ -1,0 +1,15 @@
+{
+  "name": "lirons-web-rtc-test",
+  "version": "1.0.0",
+  "description": "Liron's Web RTC Test - Godot browser multiplayer game (lobby + signaling + static web build)",
+  "main": "serve.js",
+  "scripts": {
+    "start": "node serve.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
