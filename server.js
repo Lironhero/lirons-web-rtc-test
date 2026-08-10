@@ -64,7 +64,6 @@ function lobbySummary(lobby) {
 function publicLobbies() {
   const out = [];
   for (const l of lobbies.values()) {
-    if (l.inGame) continue;            // don't advertise games in progress
     if (l.members.size >= l.maxPlayers) continue;
     out.push(lobbySummary(l));
   }
