@@ -157,6 +157,7 @@ function handleMessage(ws, raw, wss) {
         id: 1,
         hostId: 1,
         name,
+        maxPlayers,
         players: [{ id: 1, name }],
       });
       broadcastLobbyList(wss);
@@ -185,6 +186,7 @@ function handleMessage(ws, raw, wss) {
         id,
         hostId: lobby.hostId,
         name,
+        maxPlayers: lobby.maxPlayers,
         players: [...lobby.members.entries()].map(([pid, m]) => ({ id: pid, name: m.name })),
       });
       // Late join into an already-running game: tell the new player to enter it.
