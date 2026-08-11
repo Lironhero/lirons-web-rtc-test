@@ -1,9 +1,9 @@
 // Static file server for the exported web build + the WebSocket lobby server
 // on the same origin. Run: node serve.js  (serves HTTP + WS on 8080).
 //
-// Performance: .wasm/.pck/.js/.html are served gzip-compressed (browsers
-// decompress transparently) and cached in memory, with ETags for fast
-// revalidation on reload.
+// Performance: .wasm/.pck/.js/.html are served brotli- when accepted (falling
+// back to gzip), decompressed transparently by the browser, and cached in
+// memory with ETags for fast revalidation on reload.
 
 const http = require("http");
 const fs = require("fs");
@@ -27,8 +27,8 @@ const MIME = {
 // Files worth compressing (large or text-based).
 const COMPRESS = [".wasm", ".pck", ".js", ".html", ".json", ".svg"];
 
-// Precompress static files into memory at startup.
-const cache = {}; // urlPath -> { raw, gz, etag }
+// Precompress static files into memory at startup (brotli, then gzip fallback).
+const cache = {}; // urlPath -> { raw, br, gz, etag }
 
 function buildCache() {
   for (const entry of fs.readdirSync(BUILD_DIR, { withFileTypes: true })) {
@@ -39,8 +39,13 @@ function buildCache() {
     const raw = fs.readFileSync(file);
     const stat = fs.statSync(file);
     const etag = `"${stat.size.toString(16)}-${Math.floor(stat.mtimeMs).toString(16)}"`;
-    cache[urlPath] = { raw, gz: null, etag };
+    cache[urlPath] = { raw, br: null, gz: null, etag };
     if (COMPRESS.includes(ext)) {
+      cache[urlPath].br = zlib.brotliCompressSync(raw, {
+        params: {
+          [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+        },
+      });
       cache[urlPath].gz = zlib.gzipSync(raw, { level: 9 });
     }
   }
@@ -76,7 +81,13 @@ const server = http.createServer((req, res) => {
   };
 
   const accept = req.headers["accept-encoding"] || "";
-  if (entry.gz && /\bgzip\b/.test(accept)) {
+  // Prefer brotli (smaller, Firefox/Chrome/Safari all accept it since 2021).
+  if (entry.br && /\bbr\b/.test(accept)) {
+    headers["Content-Encoding"] = "br";
+    headers["Content-Length"] = entry.br.length;
+    res.writeHead(200, headers);
+    res.end(entry.br);
+  } else if (entry.gz && /\bgzip\b/.test(accept)) {
     headers["Content-Encoding"] = "gzip";
     headers["Content-Length"] = entry.gz.length;
     res.writeHead(200, headers);
