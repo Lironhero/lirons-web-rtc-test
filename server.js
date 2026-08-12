@@ -51,6 +51,16 @@ function sendToLobby(lobby, msg, exceptId = 0) {
   }
 }
 
+// Lobby-wide latency map (player id -> ms), relayed at most once a second.
+function broadcastRTTs(lobby) {
+  const now = Date.now();
+  if (now - (lobby.lastRttBroadcast || 0) < 1000) return;
+  lobby.lastRttBroadcast = now;
+  const rtts = {};
+  for (const [id, m] of lobby.members) rtts[id] = m.rtt || 0;
+  sendToLobby(lobby, { type: "rtts", rtts });
+}
+
 function lobbySummary(lobby) {
   return {
     code: lobby.code,
@@ -218,6 +228,58 @@ function handleMessage(ws, raw, wss) {
       const to = parseInt(msg.to, 10);
       if (!lobby.members.has(to)) return;
       send(lobby.members.get(to).ws, { type: "signal", from: app.id, data: msg.data });
+      break;
+    }
+
+    case "kick": {
+      // Host only: evict a member back to the main menu.
+      if (!app) return;
+      const lobby = lobbies.get(app.code);
+      if (!lobby) return;
+      if (lobby.hostId !== app.id) return send(ws, { type: "error", message: "not_host" });
+      const to = parseInt(msg.to, 10);
+      if (to === app.id || !lobby.members.has(to)) break;
+      const targetWs = lobby.members.get(to).ws;
+      send(targetWs, { type: "kicked" });
+      removeFromLobby(targetWs, wss);
+      break;
+    }
+
+    case "promote": {
+      // Host only: hand the host role to another member on the spot.
+      if (!app) return;
+      const lobby = lobbies.get(app.code);
+      if (!lobby) return;
+      if (lobby.hostId !== app.id) return send(ws, { type: "error", message: "not_host" });
+      const to = parseInt(msg.to, 10);
+      if (!lobby.members.has(to)) break;
+      lobby.hostId = to;
+      sendToLobby(lobby, { type: "host_changed", hostId: to });
+      break;
+    }
+
+    case "rtt":
+      // Client latency probe: reply with the client's own timestamp.
+      send(ws, { type: "rtt_reply", t: parseInt(msg.t, 10) || 0 });
+      break;
+
+    case "rtt_report": {
+      if (!app) return;
+      const lobby = lobbies.get(app.code);
+      if (!lobby) return;
+      const ms = Math.min(9999, Math.max(0, parseInt(msg.ms, 10) || 0));
+      lobby.members.get(app.id).rtt = ms;
+      broadcastRTTs(lobby);
+      break;
+    }
+
+    case "chat": {
+      if (!app) return;
+      const lobby = lobbies.get(app.code);
+      if (!lobby) return;
+      const text = String(msg.text || "").slice(0, 200);
+      if (!text) return;
+      sendToLobby(lobby, { type: "chat", id: app.id, name: app.name, text }, app.id);
       break;
     }
 
