@@ -237,6 +237,20 @@ function handleMessage(ws, raw, wss) {
       break;
     }
 
+    case "player_ready": {
+      if (!app) return;
+      const lobby = lobbies.get(app.code);
+      if (!lobby || !lobby.members.has(app.id)) return;
+      const p = msg.pos && typeof msg.pos === "object" ? msg.pos : {};
+      sendToLobby(lobby, {
+        type: "player_ready",
+        id: app.id,
+        name: app.name,
+        pos: { x: Number(p.x) || 0, y: Number(p.y) || 0, z: Number(p.z) || 0 },
+      });
+      break;
+    }
+
     case "start": {
       if (!app) return;
       const lobby = lobbies.get(app.code);
