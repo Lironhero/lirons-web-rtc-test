@@ -80,6 +80,16 @@ function publicLobbies() {
   return out;
 }
 
+function uniquePlayerName(lobby, requested) {
+  const raw = String(requested || "Player").trim() || "Player";
+  const used = new Set([...lobby.members.values()].map((m) => m.name.toLowerCase()));
+  if (!used.has(raw.toLowerCase())) return raw.slice(0, 24);
+  let number = 2;
+  while (used.has(`${raw} ${number}`.toLowerCase())) number++;
+  const suffix = ` ${number}`;
+  return `${raw.slice(0, Math.max(1, 24 - suffix.length))}${suffix}`;
+}
+
 function broadcastLobbyList(wss) {
   const msg = { type: "lobby_list", lobbies: publicLobbies() };
   for (const ws of wss.clients) send(ws, msg);
@@ -167,6 +177,8 @@ function handleMessage(ws, raw, wss) {
         id: 1,
         hostId: 1,
         name,
+        lobbyName,
+        lateJoin: false,
         maxPlayers,
         players: [{ id: 1, name }],
       });
@@ -182,7 +194,7 @@ function handleMessage(ws, raw, wss) {
       if (lobby.members.size >= lobby.maxPlayers)
         return send(ws, { type: "error", message: "lobby_full" });
 
-      const name = String(msg.name || "Player").slice(0, 24);
+      const name = uniquePlayerName(lobby, msg.name);
       // Next free id (host always keeps 1).
       let id = 2;
       while (lobby.members.has(id)) id++;
@@ -196,6 +208,8 @@ function handleMessage(ws, raw, wss) {
         id,
         hostId: lobby.hostId,
         name,
+        lobbyName: lobby.name,
+        lateJoin: lobby.inGame,
         maxPlayers: lobby.maxPlayers,
         players: [...lobby.members.entries()].map(([pid, m]) => ({ id: pid, name: m.name })),
       });
