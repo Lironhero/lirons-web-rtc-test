@@ -80,9 +80,11 @@ function publicLobbies() {
   return out;
 }
 
-function uniquePlayerName(lobby, requested) {
+function uniquePlayerName(lobby, requested, excludeId = 0) {
   const raw = String(requested || "Player").trim() || "Player";
-  const used = new Set([...lobby.members.values()].map((m) => m.name.toLowerCase()));
+  const used = new Set([...lobby.members.entries()]
+    .filter(([id]) => id !== excludeId)
+    .map(([, m]) => m.name.toLowerCase()));
   if (!used.has(raw.toLowerCase())) return raw.slice(0, 24);
   let number = 2;
   while (used.has(`${raw} ${number}`.toLowerCase())) number++;
@@ -223,6 +225,17 @@ function handleMessage(ws, raw, wss) {
     case "leave":
       removeFromLobby(ws, wss);
       break;
+
+    case "rename": {
+      if (!app) return;
+      const lobby = lobbies.get(app.code);
+      if (!lobby || !lobby.members.has(app.id)) return;
+      const name = uniquePlayerName(lobby, msg.name, app.id);
+      app.name = name;
+      lobby.members.get(app.id).name = name;
+      sendToLobby(lobby, { type: "peer_renamed", id: app.id, name });
+      break;
+    }
 
     case "start": {
       if (!app) return;
